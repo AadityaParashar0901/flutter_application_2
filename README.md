@@ -1,2 +1,3 @@
 # flutter_application_2
-Money Log
+
+A new Flutter project.

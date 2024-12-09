@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "659843201348",
+    "project_id": "moneylog-a8e8b",
+    "storage_bucket": "moneylog-a8e8b.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:659843201348:android:d7a71153797c43ef5cbf11",
+        "android_client_info": {
+          "package_name": "com.example.flutter_application_2"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDpfTUSiXKCAmy5sto6bwMglZ0yUQaWMGA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
