@@ -5,3 +5,5 @@
 .dart_tool/version
 .flutter-plugins
 .flutter-plugins-dependencies
+android/.gradle
+build
