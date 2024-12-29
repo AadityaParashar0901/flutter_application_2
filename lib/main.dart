@@ -43,7 +43,7 @@ class _HomePageState extends State<HomePage> {
   Future<void> calculateTotalSpent() async {
     double total = 0.0;
     final expenses = await _firestore
-        .collection('expenses')
+        .collection('expenses2')
         .where('hidden', isEqualTo: false)
         .get();
     for (var expense in expenses.docs) {
@@ -61,7 +61,7 @@ class _HomePageState extends State<HomePage> {
       DateTime? date,
       bool hidden = false}) async {
     if (docId == null) {
-      await _firestore.collection('expenses').add({
+      await _firestore.collection('expenses2').add({
         'description': description,
         'amount': amount,
         'hidden': hidden,
@@ -69,7 +69,7 @@ class _HomePageState extends State<HomePage> {
         'timestamp': FieldValue.serverTimestamp(),
       });
     } else {
-      await _firestore.collection('expenses').doc(docId).update({
+      await _firestore.collection('expenses2').doc(docId).update({
         'description': description,
         'amount': amount,
         'date': date,
@@ -79,14 +79,14 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _toggleHidden(String docId, bool currentStatus) async {
-    await _firestore.collection('expenses').doc(docId).update({
+    await _firestore.collection('expenses2').doc(docId).update({
       'hidden': !currentStatus,
     });
     calculateTotalSpent();
   }
 
   Future<void> _deleteExpense(String docId) async {
-    await _firestore.collection('expenses').doc(docId).delete();
+    await _firestore.collection('expenses2').doc(docId).delete();
     calculateTotalSpent();
   }
 
@@ -202,7 +202,7 @@ class _HomePageState extends State<HomePage> {
           Expanded(
             child: StreamBuilder(
               stream: _firestore
-                  .collection('expenses')
+                  .collection('expenses2')
                   .orderBy('timestamp', descending: true)
                   .snapshots(),
               builder: (context, snapshot) {
