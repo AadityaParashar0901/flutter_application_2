@@ -20,12 +20,107 @@ class MyApp extends StatelessWidget {
         primarySwatch: Colors.teal,
         visualDensity: VisualDensity.adaptivePlatformDensity,
       ),
-      home: HomePage(),
+      home: ListSelector(),
+    );
+  }
+}
+
+class ListSelector extends StatefulWidget {
+  @override
+  _ListSelectorState createState() => _ListSelectorState();
+}
+
+class _ListSelectorState extends State<ListSelector> {
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  void _addList(BuildContext context) {
+    final listNameController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Create New List'),
+        content: TextField(
+          controller: listNameController,
+          decoration: InputDecoration(hintText: 'List Name'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final listName = listNameController.text.trim();
+              if (listName.isNotEmpty) {
+                _firestore.collection('expense_lists').add({'name': listName});
+                Navigator.of(context).pop();
+              }
+            },
+            child: Text('Create'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _openList(String listId, String listName) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => HomePage(listId: listId, listName: listName),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Select List'),
+        actions: [
+          IconButton(
+            icon: Icon(Icons.add),
+            onPressed: () => _addList(context),
+          ),
+        ],
+      ),
+      body: StreamBuilder(
+        stream: _firestore.collection('expense_lists').snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return Center(child: CircularProgressIndicator());
+          }
+          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+            return Center(child: Text('No lists available.'));
+          }
+
+          final lists = snapshot.data!.docs;
+          return ListView.builder(
+            itemCount: lists.length,
+            itemBuilder: (context, index) {
+              final list = lists[index];
+              final listId = list.id;
+              final listName = list['name'];
+
+              return ListTile(
+                title: Text(listName),
+                onTap: () => _openList(listId, listName),
+              );
+            },
+          );
+        },
+      ),
     );
   }
 }
 
 class HomePage extends StatefulWidget {
+  final String listId;
+  final String listName;
+
+  HomePage({required this.listId, required this.listName});
+
   @override
   _HomePageState createState() => _HomePageState();
 }
@@ -44,6 +139,7 @@ class _HomePageState extends State<HomePage> {
     double total = 0.0;
     final expenses = await _firestore
         .collection('expenses2')
+        .where('listId', isEqualTo: widget.listId)
         .where('hidden', isEqualTo: false)
         .get();
     for (var expense in expenses.docs) {
@@ -54,48 +150,51 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
-  Future<void> _addOrEditExpense(
-      {String? docId,
-      String? description,
-      double? amount,
-      DateTime? date,
-      bool hidden = false}) async {
-    if (docId == null) {
-      await _firestore.collection('expenses2').add({
-        'description': description,
-        'amount': amount,
-        'hidden': hidden,
-        'date': date ?? DateTime.now(),
-        'timestamp': FieldValue.serverTimestamp(),
-      });
-    } else {
-      await _firestore.collection('expenses2').doc(docId).update({
-        'description': description,
-        'amount': amount,
-        'date': date,
-      });
+  void _generateReport() async {
+    final expenses = await _firestore
+        .collection('expenses2')
+        .where('listId', isEqualTo: widget.listId)
+        .get();
+
+    String report = 'Expense Report for ${widget.listName}\n\n';
+    double total = 0.0;
+    for (var expense in expenses.docs) {
+      final description = expense['description'];
+      final amount = expense['amount'];
+      final date = (expense['date'] as Timestamp).toDate();
+      final isHidden = expense['hidden'];
+
+      if (!isHidden) {
+        total += amount;
+      }
+
+      report +=
+          '${DateFormat.yMMMd().format(date)} - $description: \$${amount.toStringAsFixed(2)} ${isHidden ? "(Hidden)" : ""}\n';
     }
-    calculateTotalSpent();
-  }
 
-  Future<void> _toggleHidden(String docId, bool currentStatus) async {
-    await _firestore.collection('expenses2').doc(docId).update({
-      'hidden': !currentStatus,
-    });
-    calculateTotalSpent();
-  }
+    report += '\nTotal: \$${total.toStringAsFixed(2)}';
 
-  Future<void> _deleteExpense(String docId) async {
-    await _firestore.collection('expenses2').doc(docId).delete();
-    calculateTotalSpent();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Expense Report'),
+        content: SingleChildScrollView(
+          child: Text(report),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text('Close'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showExpenseDialog(BuildContext context,
       {String? docId, String? description, double? amount, DateTime? date}) {
-    final descriptionController =
-        TextEditingController(text: description ?? '');
-    final amountController =
-        TextEditingController(text: amount != null ? amount.toString() : '');
+    final descriptionController = TextEditingController(text: description ?? '');
+    final amountController = TextEditingController(text: amount != null ? amount.toString() : '');
     DateTime selectedDate = date ?? DateTime.now();
 
     showDialog(
@@ -155,13 +254,15 @@ class _HomePageState extends State<HomePage> {
                 final amt = double.tryParse(amountController.text) ?? 0.0;
 
                 if (desc.isNotEmpty && amt > 0) {
-                  _addOrEditExpense(
-                    docId: docId,
-                    description: desc,
-                    amount: amt,
-                    date: selectedDate,
-                  );
+                  _firestore.collection('expenses2').doc(docId).set({
+                    'description': desc,
+                    'amount': amt,
+                    'date': selectedDate,
+                    'hidden': false,
+                    'listId': widget.listId,
+                  }, SetOptions(merge: true));
                   Navigator.of(context).pop();
+                  calculateTotalSpent();
                 }
               },
               child: Text(docId == null ? 'Add' : 'Save'),
@@ -176,109 +277,89 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Expense Tracker'),
+        title: Text(widget.listName),
         actions: [
           IconButton(
             icon: Icon(Icons.add),
             onPressed: () => _showExpenseDialog(context),
           ),
+          IconButton(
+            icon: Icon(Icons.insert_chart),
+            onPressed: _generateReport,
+          ),
         ],
       ),
-      body: Column(
-        children: [
-          Container(
-            color: Colors.teal,
-            width: double.infinity,
-            padding: const EdgeInsets.all(16.0),
-            child: Text(
-              'Total Spent: ${totalSpent.toStringAsFixed(2)}',
-              style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white),
-              textAlign: TextAlign.center,
-            ),
-          ),
-          Expanded(
-            child: StreamBuilder(
-              stream: _firestore
-                  .collection('expenses2')
-                  .orderBy('timestamp', descending: true)
-                  .snapshots(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return Center(child: CircularProgressIndicator());
-                }
-                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                  return Center(
-                    child: Text(
-                      'No expenses added yet!',
-                      style: TextStyle(fontSize: 16, color: Colors.grey),
+      body: StreamBuilder(
+        stream: _firestore
+            .collection('expenses2')
+            .where('listId', isEqualTo: widget.listId)
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return Center(child: CircularProgressIndicator());
+          }
+          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+            return Center(child: Text('No expenses added yet!'));
+          }
+
+          final expenses = snapshot.data!.docs;
+          return ListView.builder(
+            itemCount: expenses.length,
+            itemBuilder: (context, index) {
+              final expense = expenses[index];
+              final description = expense['description'];
+              final amount = expense['amount'];
+              final date = (expense['date'] as Timestamp).toDate();
+              final isHidden = expense['hidden'];
+              final docId = expense.id;
+
+              return Card(
+                margin: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                child: ListTile(
+                  title: Text(
+                    description,
+                    style: TextStyle(
+                      decoration: isHidden ? TextDecoration.lineThrough : null,
+                      color: isHidden ? Colors.grey : Colors.black,
                     ),
-                  );
-                }
-
-                final expenses = snapshot.data!.docs;
-                return ListView.builder(
-                  itemCount: expenses.length,
-                  itemBuilder: (context, index) {
-                    final expense = expenses[index];
-                    final description = expense['description'];
-                    final amount = expense['amount'];
-                    final date = (expense['date'] as Timestamp).toDate();
-                    final isHidden = expense['hidden'];
-                    final docId = expense.id;
-
-                    return Card(
-                      margin: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                      child: ListTile(
-                        title: Text(
-                          description,
-                          style: TextStyle(
-                            decoration:
-                                isHidden ? TextDecoration.lineThrough : null,
-                            color: isHidden ? Colors.grey : Colors.black,
-                          ),
+                  ),
+                  subtitle: Text(
+                      '${DateFormat.yMMMd().format(date)} - \$${amount.toStringAsFixed(2)}'),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: Icon(
+                          isHidden ? Icons.visibility_off : Icons.visibility,
+                          color: isHidden ? Colors.grey : Colors.teal,
                         ),
-                        subtitle: Text(
-                          '${DateFormat.yMMMd().format(date)} - ${amount.toStringAsFixed(2)}',
-                        ),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              icon: Icon(
-                                isHidden
-                                    ? Icons.visibility_off
-                                    : Icons.visibility,
-                                color: isHidden ? Colors.grey : Colors.teal,
-                              ),
-                              onPressed: () => _toggleHidden(docId, isHidden),
-                            ),
-                            IconButton(
-                              icon: Icon(Icons.edit, color: Colors.blue),
-                              onPressed: () => _showExpenseDialog(
-                                context,
-                                docId: docId,
-                                description: description,
-                                amount: amount,
-                                date: date,
-                              ),
-                            ),
-                            IconButton(
-                              icon: Icon(Icons.delete, color: Colors.red),
-                              onPressed: () => _deleteExpense(docId),
-                            ),
-                          ],
+                        onPressed: () => _firestore
+                            .collection('expenses2')
+                            .doc(docId)
+                            .update({'hidden': !isHidden}),
+                      ),
+                      IconButton(
+                        icon: Icon(Icons.edit, color: Colors.blue),
+                        onPressed: () => _showExpenseDialog(
+                          context,
+                          docId: docId,
+                          description: description,
+                          amount: amount,
+                          date: date,
                         ),
                       ),
-                    );
-                  },
-                );
-              },
-            ),
-          ),
-        ],
+                      IconButton(
+                        icon: Icon(Icons.delete, color: Colors.red),
+                        onPressed: () =>
+                            _firestore.collection('expenses2').doc(docId).delete(),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          );
+        },
       ),
     );
   }
