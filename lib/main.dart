@@ -240,8 +240,10 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
-  void _addOrEditExpense(BuildContext context, {String? docId, Map<String, dynamic>? initialData}) {
-    final descriptionController = TextEditingController(text: initialData?['description'] ?? '');
+  void _addOrEditExpense(BuildContext context,
+      {String? docId, Map<String, dynamic>? initialData}) {
+    final descriptionController =
+        TextEditingController(text: initialData?['description'] ?? '');
     final amountController = TextEditingController(
         text: initialData != null ? initialData['amount'].toString() : '');
     DateTime selectedDate = initialData != null
@@ -302,7 +304,8 @@ class _HomePageState extends State<HomePage> {
             ElevatedButton(
               onPressed: () {
                 final description = descriptionController.text.trim();
-                final amount = double.tryParse(amountController.text.trim()) ?? 0.0;
+                final amount =
+                    double.tryParse(amountController.text.trim()) ?? 0.0;
 
                 if (description.isNotEmpty && amount > 0) {
                   if (docId == null) {
@@ -350,6 +353,8 @@ class _HomePageState extends State<HomePage> {
         stream: _firestore
             .collection('expenses')
             .where('listId', isEqualTo: widget.listId)
+            .orderBy('date',
+                descending: true)
             .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
@@ -407,8 +412,10 @@ class _HomePageState extends State<HomePage> {
                       ),
                       IconButton(
                         icon: Icon(Icons.delete, color: Colors.red),
-                        onPressed: () =>
-                            _firestore.collection('expenses').doc(docId).delete(),
+                        onPressed: () => _firestore
+                            .collection('expenses')
+                            .doc(docId)
+                            .delete(),
                       ),
                     ],
                   ),
